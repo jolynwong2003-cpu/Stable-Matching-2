@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stable Kidney Matching — Gale-Shapley</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0f12;
+    --surface: #141720;
+    --surface2: #1c2030;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.13);
+    --text: #e8eaf0;
+    --muted: #6b7280;
+    --dim: #3a3f4e;
+
+    --blue: #4f9cf9;
+    --blue-dim: rgba(79,156,249,0.12);
+    --blue-glow: rgba(79,156,249,0.3);
+    --green: #3ecf8e;
+    --green-dim: rgba(62,207,142,0.1);
+    --green-glow: rgba(62,207,142,0.25);
+    --amber: #f5a623;
+    --amber-dim: rgba(245,166,35,0.12);
+    --red: #f46e6e;
+    --red-dim: rgba(244,110,110,0.1);
+    --purple: #a78bfa;
+    --purple-dim: rgba(167,139,250,0.12);
+
+    --font-head: 'Syne', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+    --speed: 400ms;
+  }
+
+  html { background: var(--bg); color: var(--text); font-family: var(--font-mono); min-height: 100vh; }
+
+  body {
+    display: flex; flex-direction: column; align-items: center;
+    min-height: 100vh; padding: 40px 20px 60px;
+    background:
+      radial-gradient(ellipse 60% 40% at 20% 0%, rgba(79,156,249,0.06) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 30% at 80% 100%, rgba(62,207,142,0.05) 0%, transparent 60%),
+      var(--bg);
+  }
+
+  .page { width: 100%; max-width: 960px; }
+
+  /* ── Header ── */
+  .header { margin-bottom: 36px; }
+  .header-eyebrow {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.15em;
+    color: var(--blue); text-transform: uppercase; margin-bottom: 10px;
+  }
+  .header h1 {
+    font-family: var(--font-head); font-size: clamp(26px, 4vw, 40px);
+    font-weight: 800; line-height: 1.1; color: #fff;
+    letter-spacing: -0.02em;
+  }
+  .header h1 span { color: var(--green); }
+  .header p {
+    margin-top: 10px; font-size: 13px; color: var(--muted); max-width: 560px; line-height: 1.7;
+  }
+
+  /* ── Round / Status bar ── */
+  .status-bar {
+    display: flex; align-items: center; gap: 16px; margin-bottom: 24px;
+    padding: 10px 16px;
+    border: 0.5px solid var(--border2);
+    border-radius: 8px;
+    background: var(--surface);
+    font-size: 12px;
+  }
+  .round-pill {
+    background: var(--blue-dim); color: var(--blue);
+    border: 0.5px solid rgba(79,156,249,0.3);
+    border-radius: 20px; padding: 3px 10px;
+    font-size: 11px; font-weight: 500; letter-spacing: 0.05em;
+    min-width: 80px; text-align: center;
+    transition: all 0.3s;
+  }
+  .round-pill.done { background: var(--green-dim); color: var(--green); border-color: rgba(62,207,142,0.3); }
+  #status-text { color: var(--muted); flex: 1; font-size: 12px; }
+
+  /* ── Main grid ── */
+  .arena {
+    display: grid; grid-template-columns: 1fr 120px 1fr;
+    gap: 0; position: relative; margin-bottom: 20px;
+  }
+
+  .col-label {
+    font-family: var(--font-head); font-size: 11px; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 12px; text-align: center;
+  }
+
+  .col { display: flex; flex-direction: column; gap: 10px; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    position: relative;
+    transition: border-color var(--speed), background var(--speed), box-shadow var(--speed), transform 0.2s;
+    cursor: default;
+  }
+  .card:hover { transform: translateY(-1px); border-color: var(--border2); }
+
+  .card.proposing {
+    border-color: var(--blue);
+    background: var(--blue-dim);
+    box-shadow: 0 0 0 1px var(--blue-glow), 0 4px 20px rgba(79,156,249,0.15);
+  }
+  .card.considering {
+    border-color: var(--amber);
+    background: var(--amber-dim);
+    box-shadow: 0 0 0 1px rgba(245,166,35,0.3), 0 4px 20px rgba(245,166,35,0.1);
+  }
+  .card.held {
+    border-color: rgba(245,166,35,0.5);
+    background: rgba(245,166,35,0.06);
+  }
+  .card.matched {
+    border-color: var(--green);
+    background: var(--green-dim);
+    box-shadow: 0 0 0 1px var(--green-glow), 0 4px 20px rgba(62,207,142,0.12);
+  }
+  .card.rejected-flash {
+    border-color: var(--red);
+    background: var(--red-dim);
+  }
+
+  .card-name { font-family: var(--font-head); font-size: 15px; font-weight: 700; color: #fff; }
+  .card-blood {
+    font-size: 10px; color: var(--muted); margin-top: 2px;
+    letter-spacing: 0.05em;
+  }
+
+  .prefs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .pref {
+    font-size: 10px; padding: 2px 7px; border-radius: 4px;
+    background: var(--surface2); color: var(--muted);
+    border: 0.5px solid var(--border);
+    transition: all 0.3s;
+    position: relative;
+  }
+  .pref.active { background: rgba(79,156,249,0.18); color: var(--blue); border-color: rgba(79,156,249,0.4); font-weight: 500; }
+  .pref.accepted { background: rgba(62,207,142,0.15); color: var(--green); border-color: rgba(62,207,142,0.35); font-weight: 500; }
+  .pref.spent {
+    text-decoration: line-through; opacity: 0.3;
+  }
+
+  .status-badge {
+    position: absolute; top: 10px; right: 10px;
+    font-size: 10px; font-weight: 500; padding: 2px 8px;
+    border-radius: 20px; letter-spacing: 0.05em;
+    transition: all 0.3s;
+  }
+  .badge-held { background: rgba(245,166,35,0.2); color: var(--amber); border: 0.5px solid rgba(245,166,35,0.4); }
+  .badge-matched { background: rgba(62,207,142,0.15); color: var(--green); border: 0.5px solid rgba(62,207,142,0.35); }
+
+  /* ── Center lane (SVG lines) ── */
+  .center-lane { position: relative; }
+  #svg-lines { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+
+  /* ── Log ── */
+  .log-wrap {
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+    margin-bottom: 20px; min-height: 90px;
+  }
+  .log-title { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); margin-bottom: 8px; }
+  .log-entry {
+    font-size: 12px; line-height: 1.6; color: var(--muted);
+    padding: 3px 0; border-bottom: 0.5px solid var(--border);
+    opacity: 0; transform: translateY(4px);
+    animation: fadeIn 0.25s forwards;
+  }
+  .log-entry:last-child { border-bottom: none; }
+  @keyframes fadeIn { to { opacity: 1; transform: none; } }
+  .log-entry .c-propose { color: var(--blue); }
+  .log-entry .c-accept { color: var(--green); font-weight: 500; }
+  .log-entry .c-reject { color: var(--red); }
+  .log-entry .c-upgrade { color: var(--amber); }
+  .log-entry .c-final { color: var(--purple); font-weight: 500; }
+
+  /* ── Controls ── */
+  .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .btn {
+    font-family: var(--font-mono); font-size: 12px; font-weight: 500;
+    padding: 9px 20px; border-radius: 7px; cursor: pointer;
+    border: 0.5px solid var(--border2); background: var(--surface);
+    color: var(--text); letter-spacing: 0.03em;
+    transition: all 0.15s;
+  }
+  .btn:hover { background: var(--surface2); border-color: rgba(255,255,255,0.2); }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn.primary {
+    background: var(--blue); color: #fff; border-color: transparent;
+    box-shadow: 0 2px 12px rgba(79,156,249,0.35);
+  }
+  .btn.primary:hover { background: #6aaefa; }
+  .btn.primary:disabled { box-shadow: none; }
+  .btn.danger { border-color: rgba(244,110,110,0.3); color: var(--red); }
+  .btn.danger:hover { background: var(--red-dim); }
+
+  .speed-wrap { display: flex; align-items: center; gap: 8px; margin-left: auto; font-size: 11px; color: var(--muted); }
+  .speed-wrap input[type=range] {
+    width: 80px; accent-color: var(--blue);
+  }
+
+  /* ── Legend ── */
+  .legend {
+    display: flex; gap: 14px; margin-top: 16px; flex-wrap: wrap;
+  }
+  .leg { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+  .leg-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+
+  /* ── Algorithm explainer ── */
+  .explainer {
+    margin-top: 32px; padding: 20px 22px;
+    border: 0.5px solid var(--border);
+    border-radius: 10px; background: var(--surface);
+  }
+  .explainer h3 { font-family: var(--font-head); font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
+  .explainer p { font-size: 12px; color: var(--muted); line-height: 1.7; margin-bottom: 8px; }
+  .explainer p:last-child { margin-bottom: 0; }
+  .explainer strong { color: var(--text); font-weight: 500; }
+
+  /* ── Stable proof ── */
+  #proof-section { display: none; margin-top: 16px; }
+  #proof-section.visible { display: block; animation: fadeIn 0.4s forwards; }
+  .proof-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; margin-top: 10px; }
+  .proof-card {
+    background: var(--surface2); border: 0.5px solid var(--border);
+    border-radius: 8px; padding: 10px 12px;
+  }
+  .proof-card .match { color: var(--green); font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .proof-card .detail { font-size: 11px; color: var(--muted); line-height: 1.5; }
+
+  @media (max-width: 640px) {
+    .arena { grid-template-columns: 1fr 60px 1fr; }
+    .speed-wrap { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <div class="header-eyebrow">algorithm visualiser</div>
+    <h1>Kidney Donor Matching<br><span>Gale-Shapley Algorithm</span></h1>
+    <p>Watch the deferred acceptance algorithm find a stable matching in real time — no donor-recipient pair can mutually benefit by switching away from their assigned match.</p>
+  </div>
+
+  <div class="status-bar">
+    <div class="round-pill" id="round-pill">Round —</div>
+    <div id="status-text">Press "Next step" to begin</div>
+  </div>
+
+  <div class="arena">
+    <div>
+      <div class="col-label">Donors</div>
+      <div class="col" id="donors-col"></div>
+    </div>
+    <div class="center-lane" id="center-lane">
+      <svg id="svg-lines"></svg>
+    </div>
+    <div>
+      <div class="col-label">Recipients</div>
+      <div class="col" id="recipients-col"></div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="leg"><div class="leg-dot" style="background:var(--blue);opacity:0.7"></div>Proposing</div>
+    <div class="leg"><div class="leg-dot" style="background:var(--amber);opacity:0.7"></div>Considering</div>
+    <div class="leg"><div class="leg-dot" style="background:rgba(245,166,35,0.4)"></div>Tentatively held</div>
+    <div class="leg"><div class="leg-dot" style="background:var(--green);opacity:0.7"></div>Stable match</div>
+    <div class="leg"><div class="leg-dot" style="background:var(--red);opacity:0.7"></div>Rejected</div>
+  </div>
+
+  <div class="log-wrap" style="margin-top:20px;">
+    <div class="log-title">Event log</div>
+    <div id="log"><div style="font-size:12px;color:var(--dim);">Waiting to start…</div></div>
+  </div>
+
+  <div class="controls">
+    <button class="btn primary" id="btn-step" onclick="step()">Next step ›</button>
+    <button class="btn" id="btn-auto" onclick="toggleAuto()">▶ Auto play</button>
+    <button class="btn danger" onclick="reset()">↺ Reset</button>
+    <div class="speed-wrap">
+      <span>Speed</span>
+      <input type="range" id="speed-slider" min="200" max="1800" value="900" step="100">
+      <span id="speed-label">0.9s</span>
+    </div>
+  </div>
+
+  <div id="proof-section">
+    <div class="log-title" style="margin-top:20px;">Stable matching result</div>
+    <div class="proof-grid" id="proof-grid"></div>
+  </div>
+
+  <div class="explainer">
+    <h3>How Gale-Shapley works</h3>
+    <p>In each round, every <strong>unmatched donor</strong> proposes to their most preferred recipient they haven't yet tried. A recipient who receives a proposal will <strong>tentatively hold</strong> it — but only if it's better than their current hold. If a better offer arrives, the previously held donor is released back to the free pool.</p>
+    <p>This continues until every donor is matched. The result is <strong>donor-optimal stable</strong>: every donor gets the best possible partner they could have in any stable matching, and no pair has a mutual incentive to defect from their assignment.</p>
+    <p>In real kidney exchange programs, preferences encode <strong>compatibility scores</strong> based on blood type, HLA tissue matching, waiting time, and medical urgency.</p>
+  </div>
+
+</div>
+
+<script>
+// Round 1: Alice→Emma accepted; Ben→Emma rejected (Emma prefers Alice);
+//          Cara→Emma rejected; Dan→Finn accepted.
+// Round 2: Ben→Finn rejected (Finn prefers Dan); Cara→Grace accepted.
+// Round 3: Ben→Grace — Grace prefers Ben over Cara → Cara released (upgrade!).
+//          Cara→Hiro accepted. Final: Alice↔Emma, Dan↔Finn, Ben↔Grace, Cara↔Hiro.
+const DONORS = [
+  { id:'D1', name:'Alice', blood:'O+',  prefs:['R1','R2','R3','R4'] },
+  { id:'D2', name:'Ben',   blood:'A+',  prefs:['R1','R2','R3','R4'] },
+  { id:'D3', name:'Cara',  blood:'B+',  prefs:['R1','R2','R3','R4'] },
+  { id:'D4', name:'Dan',   blood:'AB+', prefs:['R2','R1','R3','R4'] },
+];
+const RECIPIENTS = [
+  { id:'R1', name:'Emma',  blood:'A+',  prefs:['D1','D2','D3','D4'] },
+  { id:'R2', name:'Finn',  blood:'O+',  prefs:['D4','D1','D2','D3'] },
+  { id:'R3', name:'Grace', blood:'B+',  prefs:['D2','D3','D1','D4'] },
+  { id:'R4', name:'Hiro',  blood:'AB+', prefs:['D3','D2','D1','D4'] },
+];
+
+let state = {};
+let autoTimer = null;
+
+function buildSteps() {
+  const steps = [];
+  const dNext = {D1:0,D2:0,D3:0,D4:0};
+  const rHolds = {R1:null,R2:null,R3:null,R4:null};
+  let roundNum = 0;
+  while (true) {
+    const free = DONORS.filter(d => !Object.values(rHolds).includes(d.id) && dNext[d.id] < d.prefs.length);
+    if (!free.length) break;
+    roundNum++;
+    free.forEach(donor => {
+      const rId = donor.prefs[dNext[donor.id]];
+      dNext[donor.id]++;
+      const recipient = RECIPIENTS.find(r => r.id === rId);
+      const held = rHolds[rId];
+      if (!held) {
+        rHolds[rId] = donor.id;
+        steps.push({type:'accept', dId:donor.id, rId, held:null, round:roundNum});
+      } else {
+        const rPrefs = recipient.prefs;
+        if (rPrefs.indexOf(donor.id) < rPrefs.indexOf(held)) {
+          rHolds[rId] = donor.id;
+          steps.push({type:'upgrade', dId:donor.id, rId, held, round:roundNum});
+        } else {
+          steps.push({type:'reject', dId:donor.id, rId, held, round:roundNum});
+        }
+      }
+    });
+  }
+  steps.push({type:'final', holds:{...rHolds}, round:roundNum});
+  return steps;
+}
+
+function reset() {
+  clearInterval(autoTimer); autoTimer = null;
+  document.getElementById('btn-auto').textContent = '▶ Auto play';
+  state = {
+    holds: {R1:null,R2:null,R3:null,R4:null},
+    proposalCount: {D1:0,D2:0,D3:0,D4:0},
+    matched: {},
+    done: false,
+    highlight: {dId:null,rId:null},
+    steps: buildSteps(),
+    stepIdx: 0,
+  };
+  document.getElementById('round-pill').textContent = 'Round —';
+  document.getElementById('round-pill').classList.remove('done');
+  document.getElementById('status-text').textContent = 'Press "Next step" to begin';
+  document.getElementById('btn-step').disabled = false;
+  document.getElementById('log').innerHTML = '<div style="font-size:12px;color:var(--dim);">Waiting to start…</div>';
+  document.getElementById('proof-section').classList.remove('visible');
+  render();
+}
+
+function step() {
+  if (!state.steps || state.stepIdx >= state.steps.length) return;
+  const s = state.steps[state.stepIdx++];
+  state.highlight = {dId:null, rId:null};
+
+  if (s.type === 'final') {
+    state.matched = {};
+    for (const [rId,dId] of Object.entries(s.holds)) { if(dId) state.matched[dId] = rId; }
+    state.done = true;
+    document.getElementById('btn-step').disabled = true;
+    document.getElementById('round-pill').textContent = 'Stable ✓';
+    document.getElementById('round-pill').classList.add('done');
+    document.getElementById('status-text').textContent = 'Matching complete — all pairs are stable.';
+    addLog(`<span class="c-final">Stable matching achieved. No blocking pairs exist.</span>`);
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; document.getElementById('btn-auto').textContent = '▶ Auto play'; }
+    showProof();
+    render();
+    return;
+  }
+
+  document.getElementById('round-pill').textContent = `Round ${s.round}`;
+  state.highlight = {dId:s.dId, rId:s.rId};
+  state.holds[s.rId] = (s.type === 'reject') ? state.holds[s.rId] : s.dId;
+  if (s.type !== 'reject') state.proposalCount[s.dId] = state.steps.slice(0, state.stepIdx).filter(x => x.dId === s.dId).length;
+
+  const d = DONORS.find(x=>x.id===s.dId);
+  const r = RECIPIENTS.find(x=>x.id===s.rId);
+
+  if (s.type === 'accept') {
+    state.proposalCount[s.dId] = state.steps.slice(0,state.stepIdx).filter(x=>x.dId===s.dId).length;
+    document.getElementById('status-text').textContent = `${d.name} proposes to ${r.name} — accepted tentatively.`;
+    addLog(`<span class="c-propose">${d.name}</span> → <span class="c-propose">${r.name}</span> — <span class="c-accept">accepted</span> (tentative hold)`);
+  } else if (s.type === 'upgrade') {
+    state.proposalCount[s.dId] = state.steps.slice(0,state.stepIdx).filter(x=>x.dId===s.dId).length;
+    const old = DONORS.find(x=>x.id===s.held);
+    document.getElementById('status-text').textContent = `${d.name} proposes to ${r.name} — trade-up! ${r.name} prefers ${d.name} over ${old.name}. ${old.name} is released.`;
+    addLog(`<span class="c-propose">${d.name}</span> → <span class="c-propose">${r.name}</span> — <span class="c-upgrade">trade-up!</span> <span class="c-accept">${d.name} accepted</span>, <span class="c-reject">${old.name} released</span>`);
+  } else {
+    state.proposalCount[s.dId] = state.steps.slice(0,state.stepIdx).filter(x=>x.dId===s.dId).length;
+    document.getElementById('status-text').textContent = `${d.name} proposes to ${r.name} — rejected.`;
+    addLog(`<span class="c-propose">${d.name}</span> → <span class="c-propose">${r.name}</span> — <span class="c-reject">rejected</span> (${r.name} prefers current hold)`);
+  }
+  render();
+}
+
+function addLog(html) {
+  const log = document.getElementById('log');
+  const el = document.createElement('div');
+  el.className = 'log-entry';
+  el.innerHTML = html;
+  if (log.firstChild && log.firstChild.style && log.firstChild.style.color === 'var(--dim)') log.innerHTML = '';
+  log.insertBefore(el, log.firstChild);
+  while (log.children.length > 6) log.removeChild(log.lastChild);
+}
+
+function showProof() {
+  const sec = document.getElementById('proof-section');
+  const grid = document.getElementById('proof-grid');
+  grid.innerHTML = '';
+  for (const [dId, rId] of Object.entries(state.matched)) {
+    const d = DONORS.find(x=>x.id===dId);
+    const r = RECIPIENTS.find(x=>x.id===rId);
+    const dRank = d.prefs.indexOf(rId) + 1;
+    const rRank = r.prefs.indexOf(dId) + 1;
+    const card = document.createElement('div');
+    card.className = 'proof-card';
+    card.innerHTML = `
+      <div class="match">${d.name} ↔ ${r.name}</div>
+      <div class="detail">
+        ${d.name}'s #${dRank} preference<br>
+        ${r.name}'s #${rRank} preference<br>
+        <span style="color:var(--green);font-size:10px;">✓ Stable pair</span>
+      </div>`;
+    grid.appendChild(card);
+  }
+  sec.classList.add('visible');
+}
+
+function render() {
+  renderDonors();
+  renderRecipients();
+  requestAnimationFrame(drawLines);
+}
+
+function renderDonors() {
+  const col = document.getElementById('donors-col');
+  col.innerHTML = '';
+  DONORS.forEach(d => {
+    const isProposing = state.highlight.dId === d.id;
+    const isHeld = !state.done && Object.values(state.holds).includes(d.id);
+    const isMatched = state.done && state.matched[d.id];
+    const lastStep = state.steps?.[state.stepIdx-1];
+    const isRejected = lastStep?.type === 'reject' && lastStep?.dId === d.id;
+
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.id = 'dc-' + d.id;
+    if (isMatched) card.classList.add('matched');
+    else if (isRejected) card.classList.add('rejected-flash');
+    else if (isProposing) card.classList.add('proposing');
+    else if (isHeld) card.classList.add('held');
+
+    const proposalsMade = state.steps ? state.steps.slice(0, state.stepIdx).filter(s => s.dId === d.id).length : 0;
+
+    const prefsHtml = d.prefs.map((rId, i) => {
+      const r = RECIPIENTS.find(x => x.id === rId);
+      let cls = 'pref';
+      if (state.done && state.matched[d.id] === rId) cls += ' accepted';
+      else if (!state.done && isProposing && i === proposalsMade - 1) cls += ' active';
+      else if (i < proposalsMade) cls += ' spent';
+      return `<span class="${cls}">${r.name}</span>`;
+    }).join('');
+
+    const badge = isMatched
+      ? `<div class="status-badge badge-matched">✓ ${RECIPIENTS.find(r=>r.id===state.matched[d.id]).name}</div>`
+      : (isHeld && !state.done ? `<div class="status-badge badge-held">held</div>` : '');
+
+    card.innerHTML = `
+      ${badge}
+      <div class="card-name">${d.name}</div>
+      <div class="card-blood">Blood: ${d.blood}</div>
+      <div class="prefs">${prefsHtml}</div>`;
+    col.appendChild(card);
+  });
+}
+
+function renderRecipients() {
+  const col = document.getElementById('recipients-col');
+  col.innerHTML = '';
+  RECIPIENTS.forEach(r => {
+    const isConsidering = state.highlight.rId === r.id;
+    const heldDonor = state.holds[r.id];
+    const isMatched = state.done;
+
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.id = 'rc-' + r.id;
+    if (isMatched) card.classList.add('matched');
+    else if (isConsidering) card.classList.add('considering');
+    else if (heldDonor) card.classList.add('held');
+
+    const prefsHtml = r.prefs.map(dId => {
+      const d = DONORS.find(x => x.id === dId);
+      let cls = 'pref';
+      if (state.done && Object.entries(state.matched).find(([k,v])=>k===dId&&v===r.id)) cls += ' accepted';
+      else if (!state.done && heldDonor === dId) cls += ' active';
+      return `<span class="${cls}">${d.name}</span>`;
+    }).join('');
+
+    const matchedDonorId = state.done ? Object.entries(state.matched).find(([k,v])=>v===r.id)?.[0] : null;
+    const matchedDonor = matchedDonorId ? DONORS.find(d=>d.id===matchedDonorId) : null;
+
+    const badge = isMatched && matchedDonor
+      ? `<div class="status-badge badge-matched">✓ ${matchedDonor.name}</div>`
+      : (heldDonor && !isMatched ? `<div class="status-badge badge-held">holding ${DONORS.find(d=>d.id===heldDonor).name}</div>` : '');
+
+    card.innerHTML = `
+      ${badge}
+      <div class="card-name">${r.name}</div>
+      <div class="card-blood">Needs: ${r.blood}</div>
+      <div class="prefs">${prefsHtml}</div>`;
+    col.appendChild(card);
+  });
+}
+
+function drawLines() {
+  const svg = document.getElementById('svg-lines');
+  const container = document.getElementById('center-lane');
+  const cRect = container.getBoundingClientRect();
+  svg.setAttribute('width', cRect.width);
+  svg.setAttribute('height', cRect.height);
+  svg.innerHTML = '';
+
+  const getCenter = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left - cRect.left + r.width/2, y: r.top - cRect.top + r.height/2 };
+  };
+
+  const line = (x1,y1,x2,y2,color,width,dash,opacity=1) => {
+    const el = document.createElementNS('http://www.w3.org/2000/svg','line');
+    el.setAttribute('x1',x1); el.setAttribute('y1',y1);
+    el.setAttribute('x2',x2); el.setAttribute('y2',y2);
+    el.setAttribute('stroke',color); el.setAttribute('stroke-width',width);
+    el.setAttribute('stroke-linecap','round'); el.setAttribute('opacity',opacity);
+    if (dash) el.setAttribute('stroke-dasharray',dash);
+    svg.appendChild(el);
+  };
+
+  if (state.done) {
+    for (const [dId,rId] of Object.entries(state.matched)) {
+      const a = getCenter('dc-'+dId), b = getCenter('rc-'+rId);
+      if (a&&b) line(a.x,a.y,b.x,b.y,'#3ecf8e',2,null);
+    }
+  } else {
+    for (const [rId,dId] of Object.entries(state.holds)) {
+      if (!dId) continue;
+      const a = getCenter('dc-'+dId), b = getCenter('rc-'+rId);
+      if (a&&b) line(a.x,a.y,b.x,b.y,'#f5a623',1.5,'5 3',0.7);
+    }
+    if (state.highlight.dId && state.highlight.rId) {
+      const a = getCenter('dc-'+state.highlight.dId), b = getCenter('rc-'+state.highlight.rId);
+      if (a&&b) line(a.x,a.y,b.x,b.y,'#4f9cf9',2.5,null);
+    }
+  }
+}
+
+function toggleAuto() {
+  if (autoTimer) {
+    clearInterval(autoTimer); autoTimer = null;
+    document.getElementById('btn-auto').textContent = '▶ Auto play';
+  } else {
+    document.getElementById('btn-auto').textContent = '⏸ Pause';
+    const go = () => {
+      if (state.done || state.stepIdx >= state.steps.length) {
+        clearInterval(autoTimer); autoTimer = null;
+        document.getElementById('btn-auto').textContent = '▶ Auto play';
+        return;
+      }
+      step();
+    };
+    const speed = parseInt(document.getElementById('speed-slider').value);
+    autoTimer = setInterval(go, speed);
+  }
+}
+
+document.getElementById('speed-slider').addEventListener('input', function() {
+  document.getElementById('speed-label').textContent = (this.value/1000).toFixed(1)+'s';
+  if (autoTimer) { clearInterval(autoTimer); toggleAuto(); toggleAuto(); }
+});
+
+window.addEventListener('resize', drawLines);
+reset();
+</script>
+</body>
+</html>
