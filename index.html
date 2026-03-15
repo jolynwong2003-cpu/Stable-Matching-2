@@ -249,6 +249,32 @@
     .speed-wrap { display: none; }
   }
 </style>
+ .image-section {
+  margin-top: 40px;
+  padding: 20px;
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.image-section h3 {
+  font-family: var(--font-head);
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.image-section p {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.image-section img {
+  max-width: 100%;
+  border-radius: 8px;
+  border: 0.5px solid var(--border);
+}
 </head>
 <body>
 <div class="page">
@@ -313,6 +339,12 @@
     <p>This continues until every donor is matched. The result is <strong>donor-optimal stable</strong>: every donor gets the best possible partner they could have in any stable matching, and no pair has a mutual incentive to defect from their assignment.</p>
     <p>In real kidney exchange programs, preferences encode <strong>compatibility scores</strong> based on blood type, HLA tissue matching, waiting time, and medical urgency.</p>
   </div>
+
+ <div class="image-section">
+  <h3>Kidney Exchange Example</h3>
+  <p>This diagram illustrates how incompatible donor–recipient pairs can be matched through exchange cycles.</p>
+  <img src="Visual_Image.png" alt="Kidney exchange diagram">
+</div>
 
 </div>
 
